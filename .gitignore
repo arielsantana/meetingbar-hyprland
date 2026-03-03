@@ -1,8 +1,6 @@
 .venv/
 __pycache__/
 *.pyc
-credentials/*.pickle
-credentials/*.json
 .cache/
 .DS_Store
 .vscode/

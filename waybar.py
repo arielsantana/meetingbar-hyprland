@@ -4,13 +4,7 @@ Waybar custom module script.
 Waybar calls this every 30 seconds and expects a JSON line on stdout.
 It reads the state file written by daemon.py — no direct API calls.
 
-Waybar config (add to your modules):
-    "custom/meetingbar": {
-        "exec": "python3 ~/git/meetingbar/waybar.py",
-        "interval": 30,
-        "return-type": "json",
-        "format": "{}"
-    }
+See themes/waybar-module.json for the Waybar config block.
 
 Waybar CSS classes emitted:
     free     → no events coming up
@@ -18,7 +12,6 @@ Waybar CSS classes emitted:
     soon     → meeting in ≤10 min (yellow)
     urgent   → meeting in ≤2 min  (red, pulsing via CSS)
     now      → meeting already started
-    ignored  → meeting was dismissed but is ongoing (red solid)
 """
 import json
 import sys
