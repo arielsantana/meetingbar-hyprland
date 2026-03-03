@@ -115,6 +115,10 @@ Set `LANG = "es"` (or `"en"`) in `config.py`, then restart the service:
 systemctl --user restart meetingbar
 ```
 
+## Contributing
+
+Bug reports, feature requests, and questions are welcome — open an [issue](https://github.com/arielsantana/meetingbar-hyprland/issues).
+
 ## Credits
 
 Inspired by [MeetingBar](https://github.com/leits/MeetingBar) for macOS by [@leits](https://github.com/leits).
