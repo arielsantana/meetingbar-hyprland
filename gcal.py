@@ -29,7 +29,7 @@ def _strip_html(text: str) -> str:
 
 
 def _short_name(email: str) -> str:
-    """ariels@koronet.com → koronet"""
+    """user@example.com → example"""
     domain = email.split("@")[-1]
     return domain.split(".")[0]
 

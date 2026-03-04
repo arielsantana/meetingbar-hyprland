@@ -1,7 +1,7 @@
 """
 Waybar on-click handler: opens the next meeting link if available.
 Add to waybar config:
-    "on-click": "python3 ~/git/meetingbar/click.py"
+    "on-click": "python3 /path/to/meetingbar/click.py"
 """
 import json
 import subprocess

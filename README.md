@@ -18,20 +18,24 @@ Calendar meeting overlay and Waybar status for Hyprland — zero auth setup, nat
 
 ## Requirements
 
-| Dependency | Notes |
-|------------|-------|
-| Hyprland | Any recent version (0.42+ for block window rule syntax) |
-| Waybar | For the status module |
-| GNOME Online Accounts | Configured with your Google account(s) |
-| Python 3.11+ | |
-| `gtk4-layer-shell` | Recommended — enables native fullscreen overlay |
-| `python-gobject` | System package; required for GTK4 and GOA access |
+| Dependency | Required | Notes |
+|------------|----------|-------|
+| Hyprland | Yes | 0.42+ for block window rule syntax |
+| Waybar | Yes | For the status module |
+| systemd | Yes | User sessions (`systemctl --user`); distros without systemd not supported |
+| GNOME Online Accounts | Yes | Runtime DBus service — configure via Settings → Online Accounts |
+| Python 3.11+ | Yes | |
+| `python-gobject` | Yes | System package (`python3-gi` on Debian/Ubuntu); required for GTK4 and GOA |
+| `libnotify` (`notify-send`) | Yes | Desktop notifications before meetings |
+| `xdg-utils` (`xdg-open`) | Yes | Opens meeting links in your browser |
+| Sound player | No | `pw-play` (PipeWire), `paplay` (PulseAudio), or `aplay` (ALSA) — tried in that order; missing = no sound |
+| `gtk4-layer-shell` | No | Recommended — enables native fullscreen overlay; falls back to Hyprland window rules |
 
 ## Quick Install
 
 ```bash
-git clone https://github.com/yourusername/meetingbar-hyprland.git ~/git/meetingbar
-cd ~/git/meetingbar
+git clone https://github.com/arielsantana/meetingbar-hyprland.git ~/meetingbar
+cd ~/meetingbar
 ./install.sh
 ```
 

@@ -1,9 +1,9 @@
 // Add this block to your Waybar config (e.g. ~/.config/waybar/config).
 // Also add "custom/meetingbar" to your modules-left/right/center array.
-// Update the exec path if meetingbar is installed in a different location.
+// install.sh prints the exact exec line with the correct path for your system.
 {
     "custom/meetingbar": {
-        "exec": "python3 ~/git/meetingbar/waybar.py",
+        "exec": "python3 {INSTALL_DIR}/waybar.py",
         "interval": 30,
         "return-type": "json",
         "format": "{}"

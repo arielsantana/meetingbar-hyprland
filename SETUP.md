@@ -24,8 +24,8 @@ No Cloud Console, no credentials.json, no OAuth dance needed.
 ## 2. Install
 
 ```bash
-git clone https://github.com/yourusername/meetingbar-hyprland.git ~/git/meetingbar
-cd ~/git/meetingbar
+git clone https://github.com/arielsantana/meetingbar-hyprland.git ~/meetingbar
+cd ~/meetingbar
 ./install.sh
 ```
 
@@ -60,12 +60,14 @@ Add to your Waybar config (see `themes/waybar-module.json`):
 
 ```json
 "custom/meetingbar": {
-    "exec": "python3 ~/git/meetingbar/waybar.py",
+    "exec": "python3 /path/to/meetingbar/waybar.py",
     "interval": 30,
     "return-type": "json",
     "format": "{}"
 }
 ```
+
+> `install.sh` prints the exact block with the correct path for your system — just copy-paste from its output.
 
 Add `"custom/meetingbar"` to your `modules-left`, `modules-center`, or `modules-right` array.
 
@@ -86,7 +88,8 @@ journalctl --user -u meetingbar -n 30
 ```
 Check that the venv exists at the install path and that PyGObject is accessible:
 ```bash
-~/git/meetingbar/.venv/bin/python3 -c "import gi; print('OK')"
+# Replace with your actual install path (printed by install.sh)
+/path/to/meetingbar/.venv/bin/python3 -c "import gi; print('OK')"
 ```
 
 **Overlay doesn't appear / blank screen**
