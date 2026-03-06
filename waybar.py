@@ -7,11 +7,12 @@ It reads the state file written by daemon.py — no direct API calls.
 See themes/waybar-module.json for the Waybar config block.
 
 Waybar CSS classes emitted:
-    free     → no events coming up
-    upcoming → meeting in >10 min (neutral)
-    soon     → meeting in ≤10 min (yellow)
-    urgent   → meeting in ≤2 min  (red, pulsing via CSS)
-    now      → meeting already started
+    free       → no events coming up
+    upcoming   → meeting in >10 min (neutral)
+    soon       → meeting in ≤10 min (yellow)
+    soon-blink → ≤10 min, just triggered 10-min warning (yellow, blinking ~90s)
+    urgent     → meeting in ≤2 min  (red, pulsing via CSS)
+    now        → meeting already started
 """
 import json
 import sys

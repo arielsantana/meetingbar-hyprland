@@ -14,7 +14,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import config
@@ -51,6 +51,10 @@ class MeetingBarDaemon:
         # If the event is modified (updated field changes), we re-show it.
         self.processed: dict[str, dict] = {}
         self.overlay_proc: subprocess.Popen | None = None
+        # soon_notified: event_id → {'end': datetime}
+        # Tracks events we already sent the 10-min early warning for.
+        self.soon_notified: dict[str, dict] = {}
+        self.soon_blink_until: datetime | None = None
 
         signal.signal(signal.SIGTERM, self._handle_signal)
         signal.signal(signal.SIGINT, self._handle_signal)
@@ -98,8 +102,13 @@ class MeetingBarDaemon:
             for eid, info in self.processed.items()
             if info["end"] > now
         }
+        self.soon_notified = {
+            eid: info
+            for eid, info in self.soon_notified.items()
+            if info["end"] > now
+        }
 
-        # Check each event for the notification window
+        # Check each event for notifications / overlay
         for event in self.events:
             if event["all_day"]:
                 continue
@@ -108,12 +117,22 @@ class MeetingBarDaemon:
 
             seconds_until = (event["start"] - now).total_seconds()
             minutes_until = seconds_until / 60
-            in_window = -0.25 < minutes_until < config.NOTIFY_BEFORE_MINUTES
+            event_id = event["id"]
 
+            # 10-min early warning: notification + sound + waybar blink
+            # Only for events that haven't started yet (minutes_until > 0)
+            if 0 < minutes_until <= THRESHOLD_SOON and event_id not in self.soon_notified:
+                log.info(f"[meetingbar] 10-min warning for '{event['summary']}'")
+                self._send_soon_notification(event, minutes_until)
+                self._play_sound()
+                self.soon_notified[event_id] = {"end": event["end"]}
+                self.soon_blink_until = now + timedelta(seconds=90)
+
+            # 2-min window: overlay + critical notification + sound
+            in_window = -0.25 < minutes_until < config.NOTIFY_BEFORE_MINUTES
             if not in_window:
                 continue
 
-            event_id = event["id"]
             already_shown = (
                 event_id in self.processed
                 and self.processed[event_id].get("updated") == event["updated"]
@@ -164,6 +183,15 @@ class MeetingBarDaemon:
             stderr=subprocess.PIPE,
         )
         log.info(f"[meetingbar] overlay PID={self.overlay_proc.pid}")
+
+    def _send_soon_notification(self, event: dict, minutes_until: float):
+        title = event.get("summary", "Meeting")
+        mins = int(minutes_until)
+        body = t("starts_in", mins=mins, s="s" if mins != 1 else "")
+        subprocess.Popen(
+            ["notify-send", "-u", "normal", "-t", "10000", title, body],
+            stderr=subprocess.DEVNULL,
+        )
 
     def _send_notification(self, event: dict, minutes_until: float):
         title = event.get("summary", "Meeting")
@@ -218,7 +246,7 @@ class MeetingBarDaemon:
                 css_class = "urgent"
                 text = f"󰃰 {short_title} en {fmt}{acc_tag}"
             elif mins <= THRESHOLD_SOON:
-                css_class = "soon"
+                css_class = "soon-blink" if self.soon_blink_until and now < self.soon_blink_until else "soon"
                 text = f"󰃰 {short_title} en {fmt}{acc_tag}"
             else:
                 css_class = "upcoming"

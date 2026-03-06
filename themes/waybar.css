@@ -8,8 +8,9 @@
 
 #custom-meetingbar.free     { color: #a6e3a1; }
 #custom-meetingbar.upcoming { color: #cdd6f4; }
-#custom-meetingbar.soon     { color: #f9e2af; }
-#custom-meetingbar.urgent   { color: #f38ba8; animation: meetingbar-blink 0.8s linear infinite; }
+#custom-meetingbar.soon      { color: #f9e2af; }
+#custom-meetingbar.soon-blink{ color: #f9e2af; animation: meetingbar-blink 0.8s linear infinite; }
+#custom-meetingbar.urgent    { color: #f38ba8; animation: meetingbar-blink 0.8s linear infinite; }
 #custom-meetingbar.now      { color: #f38ba8; }
 #custom-meetingbar.loading  { color: #585b70; }
 
