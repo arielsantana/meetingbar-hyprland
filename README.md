@@ -11,7 +11,7 @@ Calendar meeting overlay and Waybar status for Hyprland — zero auth setup, nat
 - **GTK4 fullscreen overlay** — blocks your screen N minutes before each meeting with Join/Dismiss buttons; nobody else has this
 - **Zero auth setup** — uses GNOME Online Accounts (already configured in Settings → Online Accounts); no Cloud Console, no credentials.json
 - **Hyprland-native** — gtk4-layer-shell, `pin`/`float`/`stayfocused` window rules, works with Hyprland 0.42+
-- **Waybar integration** — status module with CSS classes (`free`, `upcoming`, `soon`, `urgent`, `now`)
+- **Waybar integration** — status module with CSS classes (`free`, `upcoming`, `soon`, `urgent`, `now`), live countdown during meetings, and next-meeting indicator
 - **Multi-account** — merges meetings from all your Google accounts with account tags
 - **RSVP-aware** — color-coded border per response status (accepted/tentative/no-response/declined)
 - **i18n** — English and Spanish UI; set `LANG` in `config.py`
@@ -53,6 +53,7 @@ Edit `config.py`:
 | `MAX_TITLE_LENGTH` | `25` | Truncate meeting title in Waybar after N chars |
 | `LOG_LEVEL` | `"INFO"` | `"DEBUG"` logs every event on each tick |
 | `LANG` | `"en"` | UI language: `"en"` or `"es"` |
+| `NEXT_MEETING_WARN_MINUTES` | `15` | Warn about next meeting when ≤N minutes away (during an ongoing meeting) |
 
 ## Customization
 

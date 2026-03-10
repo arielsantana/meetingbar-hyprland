@@ -55,6 +55,9 @@ class MeetingBarDaemon:
         # Tracks events we already sent the 10-min early warning for.
         self.soon_notified: dict[str, dict] = {}
         self.soon_blink_until: datetime | None = None
+        # next_meeting_warned: event_id → True
+        # Tracks "next meeting in X min" warnings sent during an ongoing meeting.
+        self.next_meeting_warned: dict[str, bool] = {}
 
         signal.signal(signal.SIGTERM, self._handle_signal)
         signal.signal(signal.SIGINT, self._handle_signal)
@@ -107,6 +110,15 @@ class MeetingBarDaemon:
             for eid, info in self.soon_notified.items()
             if info["end"] > now
         }
+        # Clean up next-meeting warnings for events that already ended
+        ongoing_ids = {
+            e["id"] for e in self.events
+            if not e["all_day"] and e["start"] <= now < e["end"]
+        }
+        self.next_meeting_warned = {
+            eid: v for eid, v in self.next_meeting_warned.items()
+            if eid in ongoing_ids
+        }
 
         # Check each event for notifications / overlay
         for event in self.events:
@@ -150,6 +162,9 @@ class MeetingBarDaemon:
                 log.info(f"[meetingbar] No meeting link for '{event['summary']}', skipping overlay.")
 
             self.processed[event_id] = {"updated": event["updated"], "end": event["end"]}
+
+        # Warn about next meeting while in an ongoing one
+        self._check_next_meeting_warning(now)
 
         self._update_waybar(now)
 
@@ -214,6 +229,51 @@ class MeetingBarDaemon:
             except FileNotFoundError:
                 continue
 
+    def _check_next_meeting_warning(self, now: datetime):
+        """If we're in a meeting and the next one starts within NEXT_MEETING_WARN_MINUTES, notify once."""
+        ongoing = [
+            e for e in self.events
+            if not e["all_day"] and e["rsvp"] != "declined" and e["start"] <= now < e["end"]
+        ]
+        if not ongoing:
+            return
+
+        for current in ongoing:
+            next_evt = self._get_next_after(current, now)
+            if next_evt is None:
+                continue
+            mins_until_next = int((next_evt["start"] - now).total_seconds() / 60)
+            if mins_until_next > config.NEXT_MEETING_WARN_MINUTES:
+                continue
+            # Use a composite key: current_id + next_id so we warn once per pair
+            warn_key = f"{current['id']}:{next_evt['id']}"
+            if warn_key in self.next_meeting_warned:
+                continue
+            log.info(f"[meetingbar] Next meeting warning: '{next_evt['summary']}' in {mins_until_next}m")
+            title = next_evt.get("summary", "Meeting")
+            body = t("next_meeting_warn", title=title, mins=mins_until_next,
+                      s="s" if mins_until_next != 1 else "")
+            subprocess.Popen(
+                ["notify-send", "-u", "normal", "-t", "15000", "⏭ " + t("next_in", mins=mins_until_next), body],
+                stderr=subprocess.DEVNULL,
+            )
+            self._play_sound()
+            self.next_meeting_warned[warn_key] = True
+
+    def _get_next_after(self, current_event: dict, now: datetime) -> dict | None:
+        """Return the first event that starts after current_event (or overlaps but started later)."""
+        candidates = [
+            e for e in self.events
+            if not e["all_day"]
+            and e["rsvp"] != "declined"
+            and e["end"] > now
+            and e["start"] > current_event["start"]
+        ]
+        if not candidates:
+            return None
+        candidates.sort(key=lambda e: e["start"])
+        return candidates[0]
+
     # ------------------------------------------------------------ waybar state
 
     @staticmethod
@@ -240,8 +300,19 @@ class MeetingBarDaemon:
 
             fmt = self._fmt_mins(mins)
             if mins < 0:
+                # Meeting in progress — show remaining time countdown
+                remaining_secs = (next_event["end"] - now).total_seconds()
+                remaining_mins = int(remaining_secs / 60)
+                remaining_fmt = self._fmt_mins(max(remaining_mins, 0))
                 css_class = "now"
-                text = f"󰃰 {short_title} {t('now')}{acc_tag}"
+                text = f"󰃰 {short_title} -{remaining_fmt}{acc_tag}"
+
+                # If there's a next meeting, append it to waybar text
+                next_after = self._get_next_after(next_event, now)
+                if next_after:
+                    mins_to_next = int((next_after["start"] - now).total_seconds() / 60)
+                    if mins_to_next <= config.NEXT_MEETING_WARN_MINUTES:
+                        text += f" | {t('next_in', mins=mins_to_next)}"
             elif mins <= THRESHOLD_URGENT:
                 css_class = "urgent"
                 text = f"󰃰 {short_title} en {fmt}{acc_tag}"

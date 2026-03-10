@@ -26,6 +26,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         # Waybar / daemon UI
         "free":             "Free",
         "now":              "(now)",
+        "remaining":        "{remaining} left",
+        "next_in":          "→ next in {mins}m",
+        "next_meeting_warn": "Next: {title} in {mins} min{s}",
         "loading":          "Loading...",
         "no_meetings":      "No meetings today",
     },
@@ -45,6 +48,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         # Waybar / daemon UI
         "free":             "Libre",
         "now":              "(ahora)",
+        "remaining":        "quedan {remaining}",
+        "next_in":          "→ próx en {mins}m",
+        "next_meeting_warn": "Próx: {title} en {mins} min{s}",
         "loading":          "Iniciando meetingbar...",
         "no_meetings":      "Sin meetings hoy",
     },
