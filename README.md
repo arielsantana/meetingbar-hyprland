@@ -22,7 +22,7 @@ Calendar meeting overlay and Waybar status for Hyprland — zero auth setup, nat
 |------------|----------|-------|
 | Hyprland | Yes | 0.42+ for block window rule syntax |
 | Waybar | Yes | For the status module |
-| systemd | Yes | User sessions (`systemctl --user`); distros without systemd not supported |
+| Service manager | No | systemd user units or dinit user services, auto-detected; `--init=none` launches the daemon from `hyprland.conf` instead |
 | GNOME Online Accounts | Yes | Runtime DBus service — configure via Settings → Online Accounts |
 | Python 3.11+ | Yes | |
 | `python-gobject` | Yes | System package (`python3-gi` on Debian/Ubuntu); required for GTK4 and GOA |
@@ -81,13 +81,36 @@ waybar.py    reads the state file, prints a JSON line for Waybar on each call
 overlay.py   GTK4 fullscreen window with Join/Dismiss, launched as subprocess
 ```
 
-The daemon runs as a `systemd --user` service. It never stores credentials — GNOME Online Accounts handles OAuth token refresh transparently.
+The daemon is a plain Python loop — no service-manager APIs, no `sd_notify`. It
+just needs something to keep it running, so `install.sh` supports three ways:
+
+| `--init=` | What it writes | Restart on crash | Logs |
+| --- | --- | --- | --- |
+| `systemd` | `~/.config/systemd/user/meetingbar.service` | yes | journal |
+| `dinit` | `~/.config/dinit.d/meetingbar` | yes | `~/.local/state/meetingbar/daemon.log` |
+| `none` | nothing — an `exec-once` line for `hyprland.conf` | no | inherits Hyprland's |
+
+With no flag the installer detects which manager is usable and asks if both are.
+Detection probes whether the user instance actually answers, not merely whether
+the binary exists.
+
+It never stores credentials — GNOME Online Accounts handles OAuth token refresh
+transparently.
+
+### Which to pick
+
+`none` is the least machinery and, on Wayland, the fewest moving parts: a daemon
+started by `exec-once` inherits `WAYLAND_DISPLAY`, `XDG_RUNTIME_DIR` and
+`DBUS_SESSION_BUS_ADDRESS` from the session, so none of the environment plumbing
+below applies. You give up automatic restart.
 
 ## Troubleshooting
 
 **Service not starting**
 ```bash
-journalctl --user -u meetingbar -n 20
+journalctl --user -u meetingbar -n 20             # systemd
+tail -n 20 ~/.local/state/meetingbar/daemon.log   # dinit
+pgrep -af 'daemon\.py'                         # --init=none
 ```
 
 **Overlay doesn't appear**

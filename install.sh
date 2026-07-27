@@ -1,12 +1,45 @@
 #!/usr/bin/env bash
 # install.sh — MeetingBar installer
-# Detects install location, creates venv, generates systemd service, enables it.
+# Detects install location and init system, creates venv, generates the
+# matching service unit, enables it.
+#
+# Supported init systems: systemd (user session) and dinit (user mode).
+# Neither one is required: with --init=none the daemon is launched straight
+# from hyprland.conf and no service manager is involved.
 set -euo pipefail
 
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SERVICE_DIR="$HOME/.config/systemd/user"
-SERVICE_NAME="meetingbar.service"
-SERVICE_PATH="$SERVICE_DIR/$SERVICE_NAME"
+
+SYSTEMD_DIR="$HOME/.config/systemd/user"
+SYSTEMD_UNIT="meetingbar.service"
+
+DINIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/dinit.d"
+DINIT_UNIT="meetingbar"
+LOG_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/meetingbar/daemon.log"
+ENV_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/meetingbar/env"
+
+INIT_SYSTEM=""
+
+usage() {
+    cat <<'EOF'
+Usage: ./install.sh [--init=systemd|dinit|none]
+
+  --init=systemd   Generate a systemd user unit (default where systemd runs)
+  --init=dinit     Generate a dinit user service
+  --init=none      No service manager; print the hyprland exec-once line
+  -h, --help       This message
+
+With no flag the init system is detected, and you are asked if it is ambiguous.
+EOF
+}
+
+for arg in "$@"; do
+    case "$arg" in
+        --init=systemd|--init=dinit|--init=none) INIT_SYSTEM="${arg#--init=}" ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "Unknown argument: $arg"; usage; exit 1 ;;
+    esac
+done
 
 echo "========================================"
 echo "  MeetingBar installer"
@@ -32,13 +65,6 @@ _check_required() {
         _missing=1
     fi
 }
-
-# systemctl --user: required for service management
-if ! systemctl --user status &>/dev/null && ! systemctl --user list-units &>/dev/null 2>&1; then
-    echo "  MISSING (required): systemd user session"
-    echo "    This project requires systemd. Void, Alpine, Artix, etc. are not supported."
-    _missing=1
-fi
 
 _check_required python3        python          python3              python3
 _check_required notify-send    libnotify       libnotify            libnotify-bin
@@ -92,6 +118,82 @@ fi
 echo "      OK."
 echo ""
 
+# --- Init system detection -------------------------------------------------
+# A service manager is optional. We probe for one that can actually manage
+# services right now, not merely for an installed binary: on both systemd and
+# dinit the user instance has to be running for enable/start to do anything.
+
+has_systemd() {
+    systemctl --user list-units &>/dev/null || systemctl --user status &>/dev/null
+}
+
+has_dinit() {
+    command -v dinitctl &>/dev/null && dinitctl list &>/dev/null
+}
+
+detect_init() {
+    local found=()
+    has_systemd && found+=("systemd")
+    has_dinit  && found+=("dinit")
+
+    case "${#found[@]}" in
+        1)
+            INIT_SYSTEM="${found[0]}"
+            echo "      Detected: $INIT_SYSTEM"
+            ;;
+        0)
+            if command -v dinitctl &>/dev/null; then
+                echo "      dinitctl found, but no user dinit instance is reachable."
+                echo "      Start one (e.g. 'dinit --user') and re-run, or continue without a"
+                echo "      service manager."
+            else
+                echo "      No usable service manager found."
+            fi
+            ask_init "none"
+            ;;
+        *)
+            echo "      Both systemd and dinit are available."
+            ask_init "systemd"
+            ;;
+    esac
+}
+
+ask_init() {
+    local default="$1" reply
+    if [ ! -t 0 ]; then
+        INIT_SYSTEM="$default"
+        echo "      Not a terminal; defaulting to --init=$default"
+        return
+    fi
+    echo ""
+    echo "      Which should MeetingBar use?"
+    echo "        1) systemd   user unit"
+        echo "        2) dinit     user service"
+    echo "        3) none      launch from hyprland.conf, no service manager"
+    read -r -p "      Choice [default: $default]: " reply
+    case "$reply" in
+        1|systemd) INIT_SYSTEM="systemd" ;;
+        2|dinit)   INIT_SYSTEM="dinit" ;;
+        3|none)    INIT_SYSTEM="none" ;;
+        "")        INIT_SYSTEM="$default" ;;
+        *)         echo "      Unrecognised, using $default"; INIT_SYSTEM="$default" ;;
+    esac
+}
+
+echo "[0b/4] Init system..."
+if [ -n "$INIT_SYSTEM" ]; then
+    echo "      Forced by --init=$INIT_SYSTEM"
+else
+    detect_init
+fi
+
+# Guard against being told to use something that is not actually there.
+case "$INIT_SYSTEM" in
+    systemd) has_systemd || { echo "ERROR: --init=systemd but no systemd user session."; exit 1; } ;;
+    dinit)   command -v dinitctl &>/dev/null || { echo "ERROR: --init=dinit but dinitctl is not installed."; exit 1; } ;;
+esac
+echo ""
+
 # 1. Create virtual environment
 echo "[1/4] Creating virtual environment..."
 python3 -m venv --system-site-packages "$INSTALL_DIR/.venv"
@@ -102,27 +204,96 @@ echo "[2/4] Installing Python dependencies..."
 "$INSTALL_DIR/.venv/bin/pip" install -r "$INSTALL_DIR/requirements.txt" --quiet
 echo "      Done."
 
-# 3. Generate systemd service from template
-echo "[3/4] Generating systemd service..."
-mkdir -p "$SERVICE_DIR"
-sed "s|{INSTALL_DIR}|$INSTALL_DIR|g" "$INSTALL_DIR/meetingbar.service.template" > "$SERVICE_PATH"
-echo "      Written: $SERVICE_PATH"
+# 3. Generate the service description for the chosen init system
+echo "[3/4] Generating service description..."
+case "$INIT_SYSTEM" in
+    systemd)
+        mkdir -p "$SYSTEMD_DIR"
+        sed "s|{INSTALL_DIR}|$INSTALL_DIR|g" \
+            "$INSTALL_DIR/meetingbar.service.template" > "$SYSTEMD_DIR/$SYSTEMD_UNIT"
+        echo "      Written: $SYSTEMD_DIR/$SYSTEMD_UNIT"
+        ;;
+    dinit)
+        mkdir -p "$DINIT_DIR" "$(dirname "$LOG_FILE")"
+        sed -e "s|{INSTALL_DIR}|$INSTALL_DIR|g" \
+            -e "s|{LOG_FILE}|$LOG_FILE|g" \
+            -e "s|{ENV_FILE}|$ENV_FILE|g" \
+            "$INSTALL_DIR/meetingbar.dinit.template" > "$DINIT_DIR/$DINIT_UNIT"
+        echo "      Written: $DINIT_DIR/$DINIT_UNIT"
+        echo "      Log file: $LOG_FILE"
+        if command -v dinit-check &>/dev/null; then
+            if dinit-check -d "$DINIT_DIR" "$DINIT_UNIT"; then
+                echo "      dinit-check: OK"
+            else
+                echo "      WARNING: dinit-check reported problems (see above)."
+            fi
+        else
+            echo "      (dinit-check not installed — service file not validated)"
+        fi
+        ;;
+    none)
+        echo "      Skipped: no service manager selected."
+        ;;
+esac
 
-# 4. Enable and start the service
-echo "[4/4] Enabling and starting meetingbar service..."
-systemctl --user daemon-reload
-systemctl --user enable "$SERVICE_NAME"
-systemctl --user restart "$SERVICE_NAME"
-echo "      Done."
+# 4. Enable and start
+echo "[4/4] Enabling and starting..."
+case "$INIT_SYSTEM" in
+    systemd)
+        systemctl --user daemon-reload
+        systemctl --user enable "$SYSTEMD_UNIT"
+        systemctl --user restart "$SYSTEMD_UNIT"
+        echo "      Done."
+        ;;
+    dinit)
+        # 'reload' picks up a changed description; on a first install the
+        # service is not loaded yet and it fails, which is expected.
+        dinitctl reload "$DINIT_UNIT" &>/dev/null || true
+        # 'enable' adds a persistent waits-for dependency from the boot service.
+        dinitctl enable "$DINIT_UNIT"
+        # 'restart' errors if the service was never started; fall back to start.
+        dinitctl restart "$DINIT_UNIT" 2>/dev/null || dinitctl start "$DINIT_UNIT"
+        echo "      Done."
+        ;;
+    none)
+        echo "      Skipped. Add this to ~/.config/hypr/hyprland.conf (or machine.conf):"
+        echo ""
+        echo "        exec-once = $INSTALL_DIR/.venv/bin/python3 $INSTALL_DIR/daemon.py"
+        echo ""
+        echo "      Launching it from Hyprland means it inherits WAYLAND_DISPLAY,"
+        echo "      XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS automatically."
+        echo "      Trade-off: no automatic restart if the daemon crashes."
+        ;;
+esac
 
 echo ""
 echo "========================================"
 echo "  Installation complete!"
 echo "========================================"
 echo ""
-echo "Check service status:"
-echo "  systemctl --user status meetingbar"
-echo "  journalctl --user -u meetingbar -f"
+case "$INIT_SYSTEM" in
+    systemd)
+        echo "Check service status:"
+        echo "  systemctl --user status meetingbar"
+        echo "  journalctl --user -u meetingbar -f"
+        ;;
+    dinit)
+        echo "Check service status:"
+        echo "  dinitctl status $DINIT_UNIT"
+        echo "  tail -f $LOG_FILE"
+        echo ""
+        echo "If the daemon starts but the overlay never appears, the dinit user"
+        echo "instance probably lacks the Wayland session environment. Capture it"
+        echo "from inside the session and point env-file at it:"
+        echo "  mkdir -p $(dirname "$ENV_FILE")"
+        echo "  printenv WAYLAND_DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS  # inspect"
+        echo "  then uncomment env-file in $DINIT_DIR/$DINIT_UNIT"
+        ;;
+    none)
+        echo "Check it is running:"
+        echo "  pgrep -af 'daemon\\.py'"
+        ;;
+esac
 echo ""
 echo "--------------------------------------"
 echo "  Next steps (manual config)"

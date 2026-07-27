@@ -32,8 +32,19 @@ cd ~/meetingbar
 `install.sh` will:
 - Create a virtualenv at `.venv/` with system site-packages (required for PyGObject/GTK)
 - Install Python dependencies
-- Generate `~/.config/systemd/user/meetingbar.service` with the correct paths
+- Detect your init system and generate the matching service description
 - Enable and start the service
+
+Pass `--init=` to override the detection:
+
+```sh
+./install.sh --init=systemd   # ~/.config/systemd/user/meetingbar.service
+./install.sh --init=dinit     # ~/.config/dinit.d/meetingbar
+./install.sh --init=none      # no service manager; prints an exec-once line
+```
+
+On a distro without systemd (Artix, Void, Alpine) use `--init=dinit` or
+`--init=none`. Nothing in the daemon requires a specific init system.
 
 ## 3. Hyprland — window rules
 
@@ -76,8 +87,16 @@ Add CSS from `themes/waybar.css` to your `style.css`.
 ## 5. Verify
 
 ```bash
+# systemd
 systemctl --user status meetingbar
 journalctl --user -u meetingbar -f
+
+# dinit
+dinitctl status meetingbar
+tail -f ~/.local/state/meetingbar/daemon.log
+
+# --init=none
+pgrep -af 'daemon\.py'
 ```
 
 ## Troubleshooting
